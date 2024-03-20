@@ -1,16 +1,26 @@
--- Version 4.0
-notification.AddLegacy( "ESP Loaded!", NOTIFY_UNDO, 2 )
-
-surface.PlaySound( "buttons/button15.wav" )
-
-Msg( "Load Successful\n" )
+-- Version 4.2
+notification.AddLegacy("Press `Home` Key to customize ESP", NOTIFY_GENERIC, 5)
+surface.PlaySound("buttons/button15.wav")
+Msg("Press `Home` Key to customize ESP\n")
 
 local function DrawESP()
+
     local localPlayer = LocalPlayer()
     local localPos = localPlayer:GetPos()
-    local centerScrPos = Vector(ScrW() / 2, ScrH() / 2) -- Center of the screen
 
     local players = player.GetAll()
+
+    -- Adjusted Distance Coloring
+    local function GetDistanceColor(distance)
+        local gradientValue = math.Clamp((distance - 3) / 100, 0, 1) -- Normalize distance between 3 and 100
+        local r, g, b = 0, 255, 0 -- Default color is red
+    
+        -- Smooth gradient from green to red
+        r = math.Clamp(gradientValue * 255, 0, 255) -- From green to red
+        g = math.Clamp((1 - gradientValue) * 255, 0, 255) -- From red to green
+        
+        return Color(r, g, b)
+    end
 
     for _, ply in ipairs(players) do
         if IsValid(ply) and ply:IsPlayer() and ply:Alive() and ply ~= localPlayer then -- Skip drawing text for local player
@@ -50,22 +60,7 @@ local function DrawESP()
             -- Draw distance
             local distance = localPos:Distance(ply:GetPos()) / 50 -- Convert units to meters
             local distanceText = "Distance: " .. math.Round(distance) .. " meters"
-            local distanceColor = Color(0, 255, 0) -- Default color is green for close distance
-
-            -- Adjust color based on distance
-            if distance <= 3 then
-                distanceColor = Color(255, 255, 255) -- White
-            elseif distance <= 9 then
-                distanceColor = Color(220, 255, 220) -- White-ish green
-            elseif distance <= 24 then
-                distanceColor = Color(0, 255, 0) -- Green
-            elseif distance <= 44 then
-                distanceColor = Color(255, 255, 0) -- Yellow
-            elseif distance <= 78 then
-                distanceColor = Color(255, 165, 0) -- Orange
-            else
-                distanceColor = Color(255, 0, 0) -- Red
-            end
+            local distanceColor = GetDistanceColor(distance)
 
             surface.SetFont("DermaDefault")
             local distTextW, distTextH = surface.GetTextSize(distanceText)
@@ -76,14 +71,94 @@ local function DrawESP()
 end
 hook.Add("HUDPaint", "DrawESP", DrawESP)
 
+-- Adjusted Line Coloring
+local function GetLineColor(distance)
+    local gradientValue = math.Clamp((distance - 3) / 100, 0, 1) -- Normalize distance between 3 and 100
+    local r, g, b = 0, 255, 0 -- Default color is red
+    
+    -- Smooth gradient from green to red
+    r = math.Clamp(gradientValue * 255, 0, 255) -- From green to red
+    g = math.Clamp((1 - gradientValue) * 255, 0, 255) -- From red to green
+    
+    return Color(r, g, b)
+end
+
 hook.Add("PreDrawOpaqueRenderables", "DrawPlayerBoxesAndLines", function()
     local players = player.GetAll()
     local localPos = LocalPlayer():GetPos()
 
-    -- Change the wireframe material to a blue wireframe material
-    local blueWireframeMaterial = Material("models/wireframe")
-    blueWireframeMaterial:SetVector("$color", Vector(0, 0, 1)) -- Set color to blue
+    -- Change the wireframe material to a custom wireframe material for coloring purpose
+    local WireframeMaterial = Material("models/wireframe")
+    local selectedColor = Color(192, 232, 33) -- Default color is prupl ahh
+    local frame = nil
 
+    -- Function to change the Wireframe material color
+    local function ChangeWireframeColor(color)
+        selectedColor = color
+        WireframeMaterial:SetVector("$color", Vector(color.r / 255, color.g / 255, color.b / 255))
+    end
+
+    local lastMenuOpenTime = 0
+    local menuOpenDelay = 300 -- in milliseconds
+
+    -- Function to toggle the GUI menu
+    local function ToggleMenu()
+        local currentTime = CurTime() * 1000 -- Convert current time to milliseconds
+
+        -- Check if enough time has passed since the last menu open
+        if currentTime - lastMenuOpenTime >= menuOpenDelay then
+            lastMenuOpenTime = currentTime -- Update the last menu open time
+
+            if IsValid(frame) then
+                frame:Remove()
+                frame = nil -- Reset frame variable after removal
+            else
+                frame = vgui.Create("DFrame")
+                frame:SetSize(300, 220)
+                frame:SetTitle("`Home` To toggle this menu")
+                frame:SetVisible(true)
+                frame:SetDraggable(true)
+                frame:ShowCloseButton(true)
+                frame:MakePopup()
+                frame:Center()
+
+                -- Set the background color with opacity
+                frame.Paint = function(self, w, h)
+                    draw.RoundedBox(8, 0, 0, w, h, Color(0, 0, 0, 200)) -- Black background with 200 alpha
+                end
+
+                local colorMixer = vgui.Create("DColorMixer", frame)
+                colorMixer:SetSize(250, 150)
+                colorMixer:SetPos(20, 30)
+                colorMixer:SetPalette(true)
+                colorMixer:SetAlphaBar(false)
+                colorMixer:SetWangs(true)
+                colorMixer:SetColor(selectedColor)
+
+                local applyButton = vgui.Create("DButton", frame)
+                applyButton:SetText("Apply")
+                applyButton:SetSize(80, 30)
+                applyButton:SetPos(100, 185)
+                applyButton.DoClick = function()
+                    notification.AddLegacy("Applied!", NOTIFY_UNDO, 2)
+                    surface.PlaySound("buttons/button15.wav")
+                    Msg("Successfully Changed Color\n")
+                    ChangeWireframeColor(colorMixer:GetColor())
+                end
+            end
+        end
+    end
+
+
+    
+    -- Register the toggle menu function to be called when the insert key is pressed
+    hook.Add("PlayerButtonDown", "ToggleWireframeMenu", function(ply, key)
+        if key == KEY_HOME then
+            ToggleMenu()
+        end
+    end)
+
+    
     for _, ply in ipairs(players) do
         if IsValid(ply) and ply:IsPlayer() and ply:Alive() and ply ~= LocalPlayer() then -- Skip drawing wireframe box for local player
             local min, max = ply:GetCollisionBounds()
@@ -92,38 +167,19 @@ hook.Add("PreDrawOpaqueRenderables", "DrawPlayerBoxesAndLines", function()
 
             -- Draw the wireframe around players
             cam.IgnoreZ(true)
-            render.SetMaterial(blueWireframeMaterial) -- Use the blue wireframe material
+            render.SetMaterial(WireframeMaterial) -- Use the custom wireframe material
 
-            -- Draw lines between the current player and other players
             local pos1 = LocalPlayer():GetPos()
             for _, ply2 in ipairs(players) do
                 if IsValid(ply2) and ply2:IsPlayer() and ply2:Alive() and ply ~= ply2 then
                     local pos2 = ply2:GetPos()
-
-                    -- Calculate distance
                     local distance = localPos:Distance(ply2:GetPos()) / 50 -- Convert units to meters
-
-                    -- Adjust color based on distance
-                    local lineColor = Color(255, 255, 255, 255) -- Default color is white
-                    if distance <= 3 then
-                        lineColor = Color(255, 255, 255, 255) -- White
-                    elseif distance <= 9 then
-                        lineColor = Color(220, 255, 220, 255) -- White-ish green
-                    elseif distance <= 24 then
-                        lineColor = Color(0, 255, 0, 255) -- Green
-                    elseif distance <= 44 then
-                        lineColor = Color(255, 255, 0, 255) -- Yellow
-                    elseif distance <= 78 then
-                        lineColor = Color(255, 165, 0, 255) -- Orange
-                    else
-                        lineColor = Color(255, 0, 0, 255) -- Red
-                    end
-
+                    local lineColor = GetLineColor(distance)
                     render.DrawLine(pos1, pos2, lineColor, true)
                 end
             end
 
-            render.DrawBox(center, ply:GetAngles(), min, max, lineColor, true)
+            render.DrawBox(center, ply:GetAngles(), min, max, selectedColor, true)
             cam.IgnoreZ(false)
         end
     end
